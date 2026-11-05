@@ -5,6 +5,8 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 
 public class AdminDashboard {
 
@@ -24,10 +26,23 @@ public class AdminDashboard {
         {"CIV-1008", "Fake complaint",          "Other",    "Guntur",      "-",           "REJECTED",     "2026-10-29"}
     };
 
+    // TEMPORARY extra details, in the SAME ORDER as SAMPLE_DATA: {citizen name, phone, description}
+    private static final String[][] DETAILS = {
+        {"Ravi Kumar",   "9876500001", "Big pothole on the main road near the college gate. Bikes are slipping."},
+        {"Anitha Reddy", "9876500002", "Streetlight has been off for 5 days. The street is very dark at night."},
+        {"Suresh Babu",  "9876500003", "Garbage has not been collected for a week. There is a bad smell."},
+        {"Lakshmi Devi", "9876500004", "Water pipe is leaking near the bus stop and wasting water."},
+        {"Venkat Rao",   "9876500005", "Drain is overflowing onto the road after rain."},
+        {"Mahesh Naidu", "9876500006", "Road divider is broken and dangerous for vehicles."},
+        {"Padma Priya",  "9876500007", "Garbage is piling up near the vegetable market."},
+        {"Unknown User", "9876500008", "Test complaint with no real issue."}
+    };
+
     private static final String ALL = "All";
 
-    // These are fields so that the search and filter code can use them
+    // Fields so that the search, filter and details code can use them
     private static DefaultTableModel model;
+    private static JTable table;
     private static JTextField searchField;
     private static JComboBox<String> statusBox;
     private static JComboBox<String> categoryBox;
@@ -50,7 +65,6 @@ public class AdminDashboard {
         mainArea.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
         mainArea.add(createStatsPanel(), BorderLayout.NORTH);
 
-        // Centre: filter bar on top, table below
         JPanel centre = new JPanel(new BorderLayout(0, 10));
         centre.add(createFilterPanel(), BorderLayout.NORTH);
         centre.add(createTablePanel(), BorderLayout.CENTER);
@@ -59,7 +73,7 @@ public class AdminDashboard {
         frame.add(mainArea, BorderLayout.CENTER);
         frame.setVisible(true);
 
-        applyFilters(); // show the full list at start
+        applyFilters();
     }
 
     // ---------- SIDEBAR ----------
@@ -145,17 +159,19 @@ public class AdminDashboard {
         bar.add(statusBox);
 
         bar.add(new JLabel("Category:"));
-        categoryBox = new JComboBox<>(buildOptions(2)); // column 2 = Category
+        categoryBox = new JComboBox<>(buildOptions(2));
         bar.add(categoryBox);
 
         bar.add(new JLabel("Department:"));
-        departmentBox = new JComboBox<>(buildOptions(4)); // column 4 = Department
+        departmentBox = new JComboBox<>(buildOptions(4));
         bar.add(departmentBox);
 
         JButton resetButton = new JButton("Reset");
         bar.add(resetButton);
 
-        // Run the filter whenever the admin types or chooses something
+        JButton detailsButton = new JButton("View Details");
+        bar.add(detailsButton);
+
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e)  { applyFilters(); }
             public void removeUpdate(DocumentEvent e)  { applyFilters(); }
@@ -173,10 +189,11 @@ public class AdminDashboard {
             applyFilters();
         });
 
+        detailsButton.addActionListener(e -> openSelectedComplaint());
+
         return bar;
     }
 
-    // Builds a dropdown list ("All" + each different value in that column)
     private static String[] buildOptions(int column) {
         java.util.List<String> options = new java.util.ArrayList<>();
         options.add(ALL);
@@ -188,21 +205,20 @@ public class AdminDashboard {
         return options.toArray(new String[0]);
     }
 
-    // The main filter method: rebuilds the table using the search + filters
     private static void applyFilters() {
         String text = searchField.getText().trim().toLowerCase();
         String status = (String) statusBox.getSelectedItem();
         String category = (String) categoryBox.getSelectedItem();
         String department = (String) departmentBox.getSelectedItem();
 
-        model.setRowCount(0); // clear the table
+        model.setRowCount(0);
 
         for (String[] row : SAMPLE_DATA) {
             boolean matchesSearch =
                 text.isEmpty()
-                || row[0].toLowerCase().contains(text)   // tracking ID
-                || row[1].toLowerCase().contains(text)   // title
-                || row[3].toLowerCase().contains(text);  // location
+                || row[0].toLowerCase().contains(text)
+                || row[1].toLowerCase().contains(text)
+                || row[3].toLowerCase().contains(text);
 
             boolean matchesStatus     = status.equals(ALL)     || row[5].equals(status);
             boolean matchesCategory   = category.equals(ALL)   || row[2].equals(category);
@@ -223,12 +239,100 @@ public class AdminDashboard {
             }
         };
 
-        JTable table = new JTable(model);
+        table = new JTable(model);
         table.setRowHeight(28);
         table.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 13));
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
+        // Double-click a row to open its details
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    openSelectedComplaint();
+                }
+            }
+        });
+
         return new JScrollPane(table);
+    }
+
+    // ---------- COMPLAINT DETAILS ----------
+    private static void openSelectedComplaint() {
+        int selectedRow = table.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(table, "Please select a complaint first.");
+            return;
+        }
+        String trackingId = (String) model.getValueAt(selectedRow, 0);
+        showDetailsDialog(trackingId);
+    }
+
+    private static void showDetailsDialog(String trackingId) {
+        // Find the complaint in the sample data using its tracking ID
+        int index = -1;
+        for (int i = 0; i < SAMPLE_DATA.length; i++) {
+            if (SAMPLE_DATA[i][0].equals(trackingId)) {
+                index = i;
+                break;
+            }
+        }
+        if (index == -1) {
+            return;
+        }
+        String[] row = SAMPLE_DATA[index];
+        String[] extra = DETAILS[index];
+
+        JDialog dialog = new JDialog(
+            (Frame) SwingUtilities.getWindowAncestor(table), "Complaint Details", true);
+        dialog.setLayout(new BorderLayout(10, 10));
+
+        // Top part: label + value pairs
+        JPanel info = new JPanel(new GridLayout(0, 2, 10, 8));
+        info.setBorder(BorderFactory.createEmptyBorder(15, 15, 5, 15));
+        addDetailRow(info, "Tracking ID", row[0]);
+        addDetailRow(info, "Title",       row[1]);
+        addDetailRow(info, "Category",    row[2]);
+        addDetailRow(info, "Location",    row[3]);
+        addDetailRow(info, "Department",  row[4]);
+        addDetailRow(info, "Status",      row[5]);
+        addDetailRow(info, "Submitted On", row[6]);
+        addDetailRow(info, "Citizen",     extra[0]);
+        addDetailRow(info, "Phone",       extra[1]);
+        dialog.add(info, BorderLayout.NORTH);
+
+        // Middle part: description
+        JTextArea description = new JTextArea(extra[2]);
+        description.setLineWrap(true);
+        description.setWrapStyleWord(true);
+        description.setEditable(false);
+        description.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        JScrollPane descScroll = new JScrollPane(description);
+        descScroll.setBorder(BorderFactory.createTitledBorder("Description"));
+        JPanel descPanel = new JPanel(new BorderLayout());
+        descPanel.setBorder(BorderFactory.createEmptyBorder(0, 15, 0, 15));
+        descPanel.add(descScroll, BorderLayout.CENTER);
+        dialog.add(descPanel, BorderLayout.CENTER);
+
+        // Bottom part: close button
+        JButton close = new JButton("Close");
+        close.addActionListener(e -> dialog.dispose());
+        JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        bottom.add(close);
+        dialog.add(bottom, BorderLayout.SOUTH);
+
+        dialog.setSize(480, 520);
+        dialog.setLocationRelativeTo(table);
+        dialog.setVisible(true);
+    }
+
+    private static void addDetailRow(JPanel panel, String label, String value) {
+        JLabel name = new JLabel(label + ":");
+        name.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        JLabel val = new JLabel(value);
+        val.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        panel.add(name);
+        panel.add(val);
     }
 }
