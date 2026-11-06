@@ -23,7 +23,17 @@ public class AuthService {
     private final UserDAO userDAO;
 
     public AuthService() {
-        this.userDAO = new UserDAO();
+        this(new UserDAO());
+    }
+
+    /**
+     * Constructor for controlled DAO substitution in unit tests and integrations.
+     */
+    public AuthService(UserDAO userDAO) {
+        if (userDAO == null) {
+            throw new IllegalArgumentException("UserDAO is required.");
+        }
+        this.userDAO = userDAO;
     }
 
     public User registerCitizen(String name, String email, String phone,
