@@ -1,52 +1,253 @@
 package com.publicissues.dao;
 
-import com.publicissues.DBConnection;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.publicissues.DBConnection;
+import com.publicissues.model.Issue;
+
 public class IssueDAO {
 
-    // Each row: 0 tracking, 1 title, 2 category, 3 location, 4 department,
-    //           5 status, 6 date, 7 citizen name, 8 phone, 9 description
-    public List<String[]> getAllIssueRows() throws SQLException {
-        String sql =
-            "SELECT i.tracking_code, i.title, i.category, i.location, "
-          + "COALESCE(d.department_name, '-') AS department, "
-          + "i.status, DATE(i.created_at) AS created, "
-          + "u.name, u.phone, i.description "
-          + "FROM issues i "
-          + "LEFT JOIN app_users u ON i.citizen_id = u.user_id "
-          + "LEFT JOIN departments d ON i.department_id = d.department_id "
-          + "ORDER BY i.created_at DESC, i.issue_id DESC";
+    // Submit a new complaint.
+    public int createIssue(Issue issue) throws SQLException {
 
-        List<String[]> rows = new ArrayList<>();
-        try (Connection c = DBConnection.getConnection();
-             PreparedStatement ps = c.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                rows.add(new String[] {
-                    nz(rs.getString("tracking_code")),
-                    nz(rs.getString("title")),
-                    nz(rs.getString("category")),
-                    nz(rs.getString("location")),
-                    nz(rs.getString("department")),
-                    nz(rs.getString("status")),
-                    nz(rs.getString("created")),
-                    nz(rs.getString("name")),
-                    nz(rs.getString("phone")),
-                    nz(rs.getString("description"))
-                });
+        String sql = """
+                INSERT INTO issues
+                (tracking_code, citizen_id, department_id,
+                 title, category, description, location, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     sql, Statement.RETURN_GENERATED_KEYS)) {
+
+            statement.setString(1, issue.getTrackingCode());
+            statement.setInt(2, issue.getCitizenId());
+
+            if (issue.getDepartmentId() == null) {
+                statement.setNull(3, Types.INTEGER);
+            } else {
+                statement.setInt(3, issue.getDepartmentId());
+            }
+
+            statement.setString(4, issue.getTitle());
+            statement.setString(5, issue.getCategory());
+            statement.setString(6, issue.getDescription());
+            statement.setString(7, issue.getLocation());
+            statement.setString(8, issue.getStatus());
+
+            int rows = statement.executeUpdate();
+
+            if (rows == 0) {
+                throw new SQLException("Complaint submission failed.");
+            }
+
+            try (ResultSet keys = statement.getGeneratedKeys()) {
+                if (keys.next()) {
+                    int issueId = keys.getInt(1);
+                    issue.setIssueId(issueId);
+                    return issueId;
+                }
             }
         }
-        return rows;
+
+        throw new SQLException("Complaint ID could not be generated.");
     }
 
-    private static String nz(String s) {
-        return s == null ? "" : s;
+    // Find a complaint using its tracking code.
+    public Issue findByTrackingCode(String trackingCode)
+            throws SQLException {
+
+        String sql = """
+                SELECT * FROM issues
+                WHERE tracking_code = ?
+                """;
+
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, trackingCode);
+
+            try (ResultSet result = statement.executeQuery()) {
+
+                if (result.next()) {
+                    return mapIssue(result);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // Retrieve all complaints for the admin dashboard.
+    public List<Issue> findAll() throws SQLException {
+
+        String sql = "SELECT * FROM issues ORDER BY created_at DESC";
+
+        List<Issue> issues = new ArrayList<>();
+
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet result = statement.executeQuery()) {
+
+            while (result.next()) {
+                issues.add(mapIssue(result));
+            }
+        }
+
+        return issues;
+    }
+
+    // Retrieve complaints belonging to a particular citizen.
+    public List<Issue> findByCitizenId(int citizenId)
+            throws SQLException {
+
+        String sql = """
+                SELECT * FROM issues
+                WHERE citizen_id = ?
+                ORDER BY created_at DESC
+                """;
+
+        List<Issue> issues = new ArrayList<>();
+
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setInt(1, citizenId);
+
+            try (ResultSet result = statement.executeQuery()) {
+
+                while (result.next()) {
+                    issues.add(mapIssue(result));
+                }
+            }
+        }
+
+        return issues;
+    }
+
+    // Update the status using a new database connection.
+    public boolean updateStatus(int issueId, String newStatus)
+            throws SQLException {
+
+        String sql = """
+                UPDATE issues
+                SET status = ?
+                WHERE issue_id = ?
+                """;
+
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, newStatus);
+            statement.setInt(2, issueId);
+
+            return statement.executeUpdate() > 0;
+        }
+    }
+
+    // Find an issue by ID using an existing connection.
+    public Issue findById(Connection connection, int issueId)
+            throws SQLException {
+
+        String sql = "SELECT * FROM issues WHERE issue_id = ?";
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setInt(1, issueId);
+
+            try (ResultSet result = statement.executeQuery()) {
+
+                if (result.next()) {
+                    return mapIssue(result);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // Update issue status using an existing transaction connection.
+    public boolean updateStatus(Connection connection, int issueId,
+                                String newStatus) throws SQLException {
+
+        String sql = """
+                UPDATE issues
+                SET status = ?
+                WHERE issue_id = ?
+                """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setString(1, newStatus);
+            statement.setInt(2, issueId);
+
+            return statement.executeUpdate() > 0;
+        }
+    }
+
+    // Assign an issue to a department using an existing connection.
+    public boolean assignDepartment(Connection connection, int issueId,
+                                    int departmentId) throws SQLException {
+
+        String sql = """
+                UPDATE issues
+                SET department_id = ?
+                WHERE issue_id = ?
+                """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+
+            statement.setInt(1, departmentId);
+            statement.setInt(2, issueId);
+
+            return statement.executeUpdate() > 0;
+        }
+    }
+
+    // Convert a database record into a Java Issue object.
+    private Issue mapIssue(ResultSet result) throws SQLException {
+
+        Issue issue = new Issue();
+
+        issue.setIssueId(result.getInt("issue_id"));
+        issue.setTrackingCode(result.getString("tracking_code"));
+        issue.setCitizenId(result.getInt("citizen_id"));
+
+        int departmentId = result.getInt("department_id");
+
+        if (result.wasNull()) {
+            issue.setDepartmentId(null);
+        } else {
+            issue.setDepartmentId(departmentId);
+        }
+
+        issue.setTitle(result.getString("title"));
+        issue.setCategory(result.getString("category"));
+        issue.setDescription(result.getString("description"));
+        issue.setLocation(result.getString("location"));
+        issue.setStatus(result.getString("status"));
+
+        Timestamp createdAt = result.getTimestamp("created_at");
+
+        if (createdAt != null) {
+            issue.setCreatedAt(createdAt.toLocalDateTime());
+        }
+
+        Timestamp updatedAt = result.getTimestamp("updated_at");
+
+        if (updatedAt != null) {
+            issue.setUpdatedAt(updatedAt.toLocalDateTime());
+        }
+
+        return issue;
     }
 }

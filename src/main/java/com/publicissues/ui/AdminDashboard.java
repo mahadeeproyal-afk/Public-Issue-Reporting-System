@@ -1,6 +1,6 @@
 package com.publicissues.ui;
 
-import com.publicissues.dao.IssueDAO;
+import com.publicissues.dao.DashboardDAO;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -20,7 +20,7 @@ public class AdminDashboard {
     };
     private static final String ALL = "All";
 
-    private static final IssueDAO dao = new IssueDAO();
+    private static final DashboardDAO dao = new DashboardDAO();
     private static List<String[]> data = new ArrayList<>();
 
     private static JFrame frame;
