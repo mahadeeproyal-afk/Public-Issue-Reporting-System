@@ -21,8 +21,6 @@ public class AdminDashboard {
     private static final String ALL = "All";
 
     private static final IssueDAO dao = new IssueDAO();
-
-    // All complaints loaded from MySQL (see IssueDAO for the column order)
     private static List<String[]> data = new ArrayList<>();
 
     private static JFrame frame;
@@ -33,7 +31,7 @@ public class AdminDashboard {
     private static JComboBox<String> categoryBox;
     private static JComboBox<String> departmentBox;
     private static JLabel totalLabel, submittedLabel, inProgressLabel, resolvedLabel;
-    private static boolean loading = false; // stops filters firing while we rebuild dropdowns
+    private static boolean loading = false;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(AdminDashboard::createAndShow);
@@ -60,10 +58,9 @@ public class AdminDashboard {
         frame.add(mainArea, BorderLayout.CENTER);
         frame.setVisible(true);
 
-        refreshData(); // first load from MySQL
+        refreshData();
     }
 
-    // ---------- LOAD FROM MYSQL ----------
     private static void refreshData() {
         try {
             data = dao.getAllIssueRows();
@@ -81,7 +78,6 @@ public class AdminDashboard {
         applyFilters();
     }
 
-    // Rebuilds a dropdown: "All" + each different value in that column
     private static void fillBox(JComboBox<String> box, int column) {
         Object previous = box.getSelectedItem();
         box.removeAllItems();
@@ -107,7 +103,6 @@ public class AdminDashboard {
         return false;
     }
 
-    // ---------- SIDEBAR ----------
     private static JPanel createSidebar() {
         JPanel sidebar = new JPanel();
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
@@ -134,7 +129,6 @@ public class AdminDashboard {
         return sidebar;
     }
 
-    // ---------- STATISTICS CARDS ----------
     private static JPanel createStatsPanel() {
         JPanel stats = new JPanel(new GridLayout(1, 4, 15, 0));
         stats.setPreferredSize(new Dimension(0, 90));
@@ -185,35 +179,40 @@ public class AdminDashboard {
         return count;
     }
 
-    // ---------- SEARCH + FILTER BAR ----------
+    // Two rows: filters on top, buttons below
     private static JPanel createFilterPanel() {
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        JPanel bar = new JPanel(new GridLayout(2, 1, 0, 6));
 
-        bar.add(new JLabel("Search:"));
+        JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        row1.add(new JLabel("Search:"));
         searchField = new JTextField(16);
         searchField.setToolTipText("Tracking ID, title or location");
-        bar.add(searchField);
+        row1.add(searchField);
 
-        bar.add(new JLabel("Status:"));
+        row1.add(new JLabel("Status:"));
         statusBox = new JComboBox<>(new String[] {
             ALL, "SUBMITTED", "UNDER_REVIEW", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "REJECTED"
         });
-        bar.add(statusBox);
+        row1.add(statusBox);
 
-        bar.add(new JLabel("Category:"));
+        row1.add(new JLabel("Category:"));
         categoryBox = new JComboBox<>(new String[] {ALL});
-        bar.add(categoryBox);
+        row1.add(categoryBox);
 
-        bar.add(new JLabel("Department:"));
+        row1.add(new JLabel("Department:"));
         departmentBox = new JComboBox<>(new String[] {ALL});
-        bar.add(departmentBox);
+        row1.add(departmentBox);
 
+        JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         JButton resetButton = new JButton("Reset");
         JButton refreshButton = new JButton("Refresh");
         JButton detailsButton = new JButton("View Details");
-        bar.add(resetButton);
-        bar.add(refreshButton);
-        bar.add(detailsButton);
+        row2.add(resetButton);
+        row2.add(refreshButton);
+        row2.add(detailsButton);
+
+        bar.add(row1);
+        bar.add(row2);
 
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e)  { applyFilters(); }
@@ -260,12 +259,11 @@ public class AdminDashboard {
             boolean matchesDepartment = ALL.equals(department) || row[4].equals(department);
 
             if (matchesSearch && matchesStatus && matchesCategory && matchesDepartment) {
-                model.addRow(Arrays.copyOf(row, COLUMNS.length)); // first 7 columns only
+                model.addRow(Arrays.copyOf(row, COLUMNS.length));
             }
         }
     }
 
-    // ---------- TABLE ----------
     private static JScrollPane createTablePanel() {
         model = new DefaultTableModel(COLUMNS, 0) {
             @Override
@@ -292,7 +290,6 @@ public class AdminDashboard {
         return new JScrollPane(table);
     }
 
-    // ---------- COMPLAINT DETAILS ----------
     private static void openSelectedComplaint() {
         int selectedRow = table.getSelectedRow();
         if (selectedRow == -1) {
