@@ -131,6 +131,21 @@ class IssueBackendIntegrationTest {
     }
 
     @Test
+    void invalidStatusTransitionLeavesIssueAndHistoryUnchanged() throws SQLException {
+        Issue issue = newIssue();
+        int issueId = ISSUE_SERVICE.submitIssue(issue);
+        createdIssueIds.add(issueId);
+        int adminId = requireUser(ADMIN_EMAIL).getUserId();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> MANAGEMENT_SERVICE.updateStatus(
+                        issueId, adminId, "RESOLVED", "invalid transition test"));
+
+        assertEquals("SUBMITTED", loadIssue(issueId).getStatus());
+        assertTrue(HISTORY_DAO.findHistoryByIssueId(issueId).isEmpty());
+    }
+
+    @Test
     void adminStatusChangeWritesMatchingHistory() throws SQLException {
         Issue issue = newIssue();
         int issueId = ISSUE_SERVICE.submitIssue(issue);
@@ -154,13 +169,18 @@ class IssueBackendIntegrationTest {
         int adminId = requireUser(ADMIN_EMAIL).getUserId();
         int departmentId = requireDepartmentId();
 
+        MANAGEMENT_SERVICE.updateStatus(
+                issueId, adminId, "UNDER_REVIEW", "ready for assignment");
         MANAGEMENT_SERVICE.assignDepartment(
                 issueId, departmentId, adminId, "integration assignment test");
 
         Issue assigned = loadIssue(issueId);
         assertEquals(departmentId, assigned.getDepartmentId());
         assertEquals("ASSIGNED", assigned.getStatus());
-        assertEquals(1, HISTORY_DAO.findHistoryByIssueId(issueId).size());
+        List<String> history = HISTORY_DAO.findHistoryByIssueId(issueId);
+        assertEquals(2, history.size());
+        assertTrue(history.get(0).contains("SUBMITTED -> UNDER_REVIEW"));
+        assertTrue(history.get(1).contains("UNDER_REVIEW -> ASSIGNED"));
     }
 
     @Test
