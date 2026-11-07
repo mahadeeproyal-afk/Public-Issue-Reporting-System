@@ -1,5 +1,7 @@
 package com.publicissues.ui;
 
+import com.publicissues.dao.IssueDAO;
+
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -7,53 +9,38 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 public class AdminDashboard {
 
     private static final String[] COLUMNS = {
         "Tracking ID", "Title", "Category", "Location", "Department", "Status", "Date"
     };
-
-    // TEMPORARY sample data. Later this will come from MySQL.
-    private static final String[][] SAMPLE_DATA = {
-        {"CIV-1001", "Pothole near college",    "Road",     "Amaravati",   "Roads",       "SUBMITTED",    "2026-11-01"},
-        {"CIV-1002", "Streetlight not working", "Electric", "Mangalagiri", "Electricity", "IN_PROGRESS",  "2026-11-01"},
-        {"CIV-1003", "Garbage not collected",   "Garbage",  "Guntur",      "Sanitation",  "RESOLVED",     "2026-10-30"},
-        {"CIV-1004", "Water pipe leakage",      "Water",    "Vijayawada",  "Water Works", "ASSIGNED",     "2026-10-31"},
-        {"CIV-1005", "Drainage overflow",       "Drainage", "Tadepalli",   "Sanitation",  "UNDER_REVIEW", "2026-11-02"},
-        {"CIV-1006", "Broken road divider",     "Road",     "Amaravati",   "Roads",       "SUBMITTED",    "2026-11-03"},
-        {"CIV-1007", "Garbage near market",     "Garbage",  "Mangalagiri", "Sanitation",  "IN_PROGRESS",  "2026-11-02"},
-        {"CIV-1008", "Fake complaint",          "Other",    "Guntur",      "-",           "REJECTED",     "2026-10-29"}
-    };
-
-    // TEMPORARY extra details, in the SAME ORDER as SAMPLE_DATA: {citizen name, phone, description}
-    private static final String[][] DETAILS = {
-        {"Ravi Kumar",   "9876500001", "Big pothole on the main road near the college gate. Bikes are slipping."},
-        {"Anitha Reddy", "9876500002", "Streetlight has been off for 5 days. The street is very dark at night."},
-        {"Suresh Babu",  "9876500003", "Garbage has not been collected for a week. There is a bad smell."},
-        {"Lakshmi Devi", "9876500004", "Water pipe is leaking near the bus stop and wasting water."},
-        {"Venkat Rao",   "9876500005", "Drain is overflowing onto the road after rain."},
-        {"Mahesh Naidu", "9876500006", "Road divider is broken and dangerous for vehicles."},
-        {"Padma Priya",  "9876500007", "Garbage is piling up near the vegetable market."},
-        {"Unknown User", "9876500008", "Test complaint with no real issue."}
-    };
-
     private static final String ALL = "All";
 
-    // Fields so that the search, filter and details code can use them
+    private static final IssueDAO dao = new IssueDAO();
+
+    // All complaints loaded from MySQL (see IssueDAO for the column order)
+    private static List<String[]> data = new ArrayList<>();
+
+    private static JFrame frame;
     private static DefaultTableModel model;
     private static JTable table;
     private static JTextField searchField;
     private static JComboBox<String> statusBox;
     private static JComboBox<String> categoryBox;
     private static JComboBox<String> departmentBox;
+    private static JLabel totalLabel, submittedLabel, inProgressLabel, resolvedLabel;
+    private static boolean loading = false; // stops filters firing while we rebuild dropdowns
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(AdminDashboard::createAndShow);
     }
 
     private static void createAndShow() {
-        JFrame frame = new JFrame("Admin Dashboard");
+        frame = new JFrame("Admin Dashboard");
         frame.setSize(1100, 650);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLocationRelativeTo(null);
@@ -73,7 +60,51 @@ public class AdminDashboard {
         frame.add(mainArea, BorderLayout.CENTER);
         frame.setVisible(true);
 
+        refreshData(); // first load from MySQL
+    }
+
+    // ---------- LOAD FROM MYSQL ----------
+    private static void refreshData() {
+        try {
+            data = dao.getAllIssueRows();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(frame,
+                "Could not load complaints from the database:\n" + ex.getMessage(),
+                "Database error", JOptionPane.ERROR_MESSAGE);
+            data = new ArrayList<>();
+        }
+        loading = true;
+        fillBox(categoryBox, 2);
+        fillBox(departmentBox, 4);
+        loading = false;
+        updateStats();
         applyFilters();
+    }
+
+    // Rebuilds a dropdown: "All" + each different value in that column
+    private static void fillBox(JComboBox<String> box, int column) {
+        Object previous = box.getSelectedItem();
+        box.removeAllItems();
+        box.addItem(ALL);
+        for (String[] row : data) {
+            if (!row[column].isEmpty() && !contains(box, row[column])) {
+                box.addItem(row[column]);
+            }
+        }
+        if (previous != null && contains(box, previous.toString())) {
+            box.setSelectedItem(previous);
+        } else {
+            box.setSelectedIndex(0);
+        }
+    }
+
+    private static boolean contains(JComboBox<String> box, String value) {
+        for (int i = 0; i < box.getItemCount(); i++) {
+            if (box.getItemAt(i).equals(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---------- SIDEBAR ----------
@@ -108,19 +139,23 @@ public class AdminDashboard {
         JPanel stats = new JPanel(new GridLayout(1, 4, 15, 0));
         stats.setPreferredSize(new Dimension(0, 90));
 
-        stats.add(createCard("Total",       SAMPLE_DATA.length,         new Color(59, 130, 246)));
-        stats.add(createCard("Submitted",   countStatus("SUBMITTED"),   new Color(245, 158, 11)));
-        stats.add(createCard("In Progress", countStatus("IN_PROGRESS"), new Color(139, 92, 246)));
-        stats.add(createCard("Resolved",    countStatus("RESOLVED"),    new Color(34, 197, 94)));
+        totalLabel      = new JLabel("0");
+        submittedLabel  = new JLabel("0");
+        inProgressLabel = new JLabel("0");
+        resolvedLabel   = new JLabel("0");
+
+        stats.add(createCard("Total",       totalLabel,      new Color(59, 130, 246)));
+        stats.add(createCard("Submitted",   submittedLabel,  new Color(245, 158, 11)));
+        stats.add(createCard("In Progress", inProgressLabel, new Color(139, 92, 246)));
+        stats.add(createCard("Resolved",    resolvedLabel,   new Color(34, 197, 94)));
         return stats;
     }
 
-    private static JPanel createCard(String label, int number, Color color) {
+    private static JPanel createCard(String label, JLabel numberLabel, Color color) {
         JPanel card = new JPanel(new BorderLayout());
         card.setBackground(color);
         card.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
 
-        JLabel numberLabel = new JLabel(String.valueOf(number));
         numberLabel.setForeground(Color.WHITE);
         numberLabel.setFont(new Font("Segoe UI", Font.BOLD, 30));
 
@@ -133,9 +168,16 @@ public class AdminDashboard {
         return card;
     }
 
+    private static void updateStats() {
+        totalLabel.setText(String.valueOf(data.size()));
+        submittedLabel.setText(String.valueOf(countStatus("SUBMITTED")));
+        inProgressLabel.setText(String.valueOf(countStatus("IN_PROGRESS")));
+        resolvedLabel.setText(String.valueOf(countStatus("RESOLVED")));
+    }
+
     private static int countStatus(String status) {
         int count = 0;
-        for (String[] row : SAMPLE_DATA) {
+        for (String[] row : data) {
             if (row[5].equals(status)) {
                 count++;
             }
@@ -148,7 +190,7 @@ public class AdminDashboard {
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
 
         bar.add(new JLabel("Search:"));
-        searchField = new JTextField(18);
+        searchField = new JTextField(16);
         searchField.setToolTipText("Tracking ID, title or location");
         bar.add(searchField);
 
@@ -159,17 +201,18 @@ public class AdminDashboard {
         bar.add(statusBox);
 
         bar.add(new JLabel("Category:"));
-        categoryBox = new JComboBox<>(buildOptions(2));
+        categoryBox = new JComboBox<>(new String[] {ALL});
         bar.add(categoryBox);
 
         bar.add(new JLabel("Department:"));
-        departmentBox = new JComboBox<>(buildOptions(4));
+        departmentBox = new JComboBox<>(new String[] {ALL});
         bar.add(departmentBox);
 
         JButton resetButton = new JButton("Reset");
-        bar.add(resetButton);
-
+        JButton refreshButton = new JButton("Refresh");
         JButton detailsButton = new JButton("View Details");
+        bar.add(resetButton);
+        bar.add(refreshButton);
         bar.add(detailsButton);
 
         searchField.getDocument().addDocumentListener(new DocumentListener() {
@@ -188,24 +231,16 @@ public class AdminDashboard {
             departmentBox.setSelectedIndex(0);
             applyFilters();
         });
-
+        refreshButton.addActionListener(e -> refreshData());
         detailsButton.addActionListener(e -> openSelectedComplaint());
 
         return bar;
     }
 
-    private static String[] buildOptions(int column) {
-        java.util.List<String> options = new java.util.ArrayList<>();
-        options.add(ALL);
-        for (String[] row : SAMPLE_DATA) {
-            if (!options.contains(row[column])) {
-                options.add(row[column]);
-            }
-        }
-        return options.toArray(new String[0]);
-    }
-
     private static void applyFilters() {
+        if (loading || model == null) {
+            return;
+        }
         String text = searchField.getText().trim().toLowerCase();
         String status = (String) statusBox.getSelectedItem();
         String category = (String) categoryBox.getSelectedItem();
@@ -213,19 +248,19 @@ public class AdminDashboard {
 
         model.setRowCount(0);
 
-        for (String[] row : SAMPLE_DATA) {
+        for (String[] row : data) {
             boolean matchesSearch =
                 text.isEmpty()
                 || row[0].toLowerCase().contains(text)
                 || row[1].toLowerCase().contains(text)
                 || row[3].toLowerCase().contains(text);
 
-            boolean matchesStatus     = status.equals(ALL)     || row[5].equals(status);
-            boolean matchesCategory   = category.equals(ALL)   || row[2].equals(category);
-            boolean matchesDepartment = department.equals(ALL) || row[4].equals(department);
+            boolean matchesStatus     = ALL.equals(status)     || row[5].equals(status);
+            boolean matchesCategory   = ALL.equals(category)   || row[2].equals(category);
+            boolean matchesDepartment = ALL.equals(department) || row[4].equals(department);
 
             if (matchesSearch && matchesStatus && matchesCategory && matchesDepartment) {
-                model.addRow(row);
+                model.addRow(Arrays.copyOf(row, COLUMNS.length)); // first 7 columns only
             }
         }
     }
@@ -245,7 +280,6 @@ public class AdminDashboard {
         table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 13));
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-        // Double-click a row to open its details
         table.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -262,48 +296,36 @@ public class AdminDashboard {
     private static void openSelectedComplaint() {
         int selectedRow = table.getSelectedRow();
         if (selectedRow == -1) {
-            JOptionPane.showMessageDialog(table, "Please select a complaint first.");
+            JOptionPane.showMessageDialog(frame, "Please select a complaint first.");
             return;
         }
         String trackingId = (String) model.getValueAt(selectedRow, 0);
-        showDetailsDialog(trackingId);
-    }
-
-    private static void showDetailsDialog(String trackingId) {
-        // Find the complaint in the sample data using its tracking ID
-        int index = -1;
-        for (int i = 0; i < SAMPLE_DATA.length; i++) {
-            if (SAMPLE_DATA[i][0].equals(trackingId)) {
-                index = i;
-                break;
+        for (String[] row : data) {
+            if (row[0].equals(trackingId)) {
+                showDetailsDialog(row);
+                return;
             }
         }
-        if (index == -1) {
-            return;
-        }
-        String[] row = SAMPLE_DATA[index];
-        String[] extra = DETAILS[index];
+    }
 
-        JDialog dialog = new JDialog(
-            (Frame) SwingUtilities.getWindowAncestor(table), "Complaint Details", true);
+    private static void showDetailsDialog(String[] row) {
+        JDialog dialog = new JDialog(frame, "Complaint Details", true);
         dialog.setLayout(new BorderLayout(10, 10));
 
-        // Top part: label + value pairs
         JPanel info = new JPanel(new GridLayout(0, 2, 10, 8));
         info.setBorder(BorderFactory.createEmptyBorder(15, 15, 5, 15));
-        addDetailRow(info, "Tracking ID", row[0]);
-        addDetailRow(info, "Title",       row[1]);
-        addDetailRow(info, "Category",    row[2]);
-        addDetailRow(info, "Location",    row[3]);
-        addDetailRow(info, "Department",  row[4]);
-        addDetailRow(info, "Status",      row[5]);
+        addDetailRow(info, "Tracking ID",  row[0]);
+        addDetailRow(info, "Title",        row[1]);
+        addDetailRow(info, "Category",     row[2]);
+        addDetailRow(info, "Location",     row[3]);
+        addDetailRow(info, "Department",   row[4]);
+        addDetailRow(info, "Status",       row[5]);
         addDetailRow(info, "Submitted On", row[6]);
-        addDetailRow(info, "Citizen",     extra[0]);
-        addDetailRow(info, "Phone",       extra[1]);
+        addDetailRow(info, "Citizen",      row[7]);
+        addDetailRow(info, "Phone",        row[8]);
         dialog.add(info, BorderLayout.NORTH);
 
-        // Middle part: description
-        JTextArea description = new JTextArea(extra[2]);
+        JTextArea description = new JTextArea(row[9]);
         description.setLineWrap(true);
         description.setWrapStyleWord(true);
         description.setEditable(false);
@@ -315,7 +337,6 @@ public class AdminDashboard {
         descPanel.add(descScroll, BorderLayout.CENTER);
         dialog.add(descPanel, BorderLayout.CENTER);
 
-        // Bottom part: close button
         JButton close = new JButton("Close");
         close.addActionListener(e -> dialog.dispose());
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -323,7 +344,7 @@ public class AdminDashboard {
         dialog.add(bottom, BorderLayout.SOUTH);
 
         dialog.setSize(480, 520);
-        dialog.setLocationRelativeTo(table);
+        dialog.setLocationRelativeTo(frame);
         dialog.setVisible(true);
     }
 
