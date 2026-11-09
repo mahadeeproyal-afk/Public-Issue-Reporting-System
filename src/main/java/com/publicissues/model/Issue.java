@@ -15,6 +15,9 @@ public class Issue {
     private String status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String citizenName;
+    private String citizenEmail;
+    private String citizenPhone;
 
     public Issue() {
     }
@@ -106,4 +109,11 @@ public class Issue {
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
     }
+
+    public String getCitizenName() { return citizenName; }
+    public void setCitizenName(String citizenName) { this.citizenName = citizenName; }
+    public String getCitizenEmail() { return citizenEmail; }
+    public void setCitizenEmail(String citizenEmail) { this.citizenEmail = citizenEmail; }
+    public String getCitizenPhone() { return citizenPhone; }
+    public void setCitizenPhone(String citizenPhone) { this.citizenPhone = citizenPhone; }
 }

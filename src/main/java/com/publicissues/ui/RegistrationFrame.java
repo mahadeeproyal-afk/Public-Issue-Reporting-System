@@ -1,9 +1,13 @@
 package com.publicissues.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.GridLayout;
+import java.awt.Insets;
 import java.util.Arrays;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
@@ -14,6 +18,7 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JPasswordField;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
@@ -45,7 +50,9 @@ public class RegistrationFrame extends JFrame {
         this.onAuthenticated = onAuthenticated;
 
         setTitle("Public Issue Reporting System - Registration");
-        setSize(480, 360);
+        Dimension screen = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
+        setSize(Math.min(560, screen.width - 40), Math.min(700, screen.height - 60));
+        setMinimumSize(new Dimension(420, Math.min(500, screen.height - 40)));
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
             @Override
@@ -56,15 +63,20 @@ public class RegistrationFrame extends JFrame {
             }
         });
         setLocationRelativeTo(null);
-        setResizable(false);
+        setResizable(true);
 
         nameField = new JTextField(20);
         emailField = new JTextField(20);
         phoneField = new JTextField(20);
         passwordField = new JPasswordField(20);
         confirmPasswordField = new JPasswordField(20);
-        registerButton = new JButton("Register");
-        backButton = new JButton("Back to Login");
+        CivicTheme.styleField(nameField);
+        CivicTheme.styleField(emailField);
+        CivicTheme.styleField(phoneField);
+        CivicTheme.styleField(passwordField);
+        CivicTheme.styleField(confirmPasswordField);
+        registerButton = CivicTheme.primaryButton("Create account");
+        backButton = CivicTheme.secondaryButton("Back to sign in");
 
         buildInterface();
 
@@ -74,33 +86,64 @@ public class RegistrationFrame extends JFrame {
     }
 
     private void buildInterface() {
-        JPanel mainPanel = new JPanel(new BorderLayout(10, 15));
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(
-                20, 30, 20, 30));
+        JPanel page = new JPanel(new BorderLayout());
+        page.setBackground(CivicTheme.CANVAS);
+        page.setBorder(BorderFactory.createEmptyBorder(22, 26, 22, 26));
+        JPanel card = new JPanel(new BorderLayout(0, 18));
+        card.setBackground(CivicTheme.SURFACE);
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(CivicTheme.BORDER),
+                BorderFactory.createEmptyBorder(24, 32, 24, 32)));
 
-        JLabel heading = new JLabel(
-                "CREATE CITIZEN ACCOUNT", JLabel.CENTER);
+        JPanel header = new JPanel(new GridBagLayout());
+        header.setBackground(CivicTheme.SURFACE);
+        GridBagConstraints h = new GridBagConstraints();
+        h.gridx = 0; h.gridy = 0; h.anchor = GridBagConstraints.WEST;
+        h.insets = new Insets(0, 0, 7, 0);
+        JLabel eyebrow = new JLabel("CIVIC SERVICES  /  CITIZEN ACCESS");
+        eyebrow.setFont(CivicTheme.BODY_BOLD);
+        eyebrow.setForeground(CivicTheme.ACCENT);
+        header.add(eyebrow, h);
+        h.gridy++; h.insets = new Insets(0, 0, 6, 0);
+        JLabel heading = new JLabel("Create your account");
+        heading.setFont(CivicTheme.TITLE);
+        header.add(heading, h);
+        h.gridy++; h.insets = new Insets(0, 0, 0, 0);
+        JLabel subtitle = new JLabel("Register as a citizen to submit and follow reports.");
+        subtitle.setForeground(CivicTheme.MUTED);
+        header.add(subtitle, h);
 
-        JPanel formPanel = new JPanel(new GridLayout(5, 2, 10, 12));
-        formPanel.add(new JLabel("Full name:"));
-        formPanel.add(nameField);
-        formPanel.add(new JLabel("Email:"));
-        formPanel.add(emailField);
-        formPanel.add(new JLabel("Phone (optional):"));
-        formPanel.add(phoneField);
-        formPanel.add(new JLabel("Password:"));
-        formPanel.add(passwordField);
-        formPanel.add(new JLabel("Confirm password:"));
-        formPanel.add(confirmPasswordField);
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setBackground(CivicTheme.SURFACE);
+        GridBagConstraints c = new GridBagConstraints();
+        c.gridx = 0; c.gridy = 0; c.weightx = 1; c.fill = GridBagConstraints.HORIZONTAL;
+        c.anchor = GridBagConstraints.WEST;
+        addFormRow(form, c, "Full name *", nameField);
+        addFormRow(form, c, "Email address *", emailField);
+        addFormRow(form, c, "Phone (optional)", phoneField);
+        addFormRow(form, c, "Password * (8 or more characters)", passwordField);
+        addFormRow(form, c, "Confirm password *", confirmPasswordField);
 
-        JPanel buttonPanel = new JPanel();
-        buttonPanel.add(registerButton);
-        buttonPanel.add(backButton);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        actions.setBackground(CivicTheme.SURFACE);
+        actions.add(backButton);
+        actions.add(registerButton);
+        card.add(header, BorderLayout.NORTH);
+        card.add(form, BorderLayout.CENTER);
+        JScrollPane scroll = CivicTheme.scrollPane(card);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        page.add(scroll, BorderLayout.CENTER);
+        page.add(actions, BorderLayout.SOUTH);
+        add(page);
+    }
 
-        mainPanel.add(heading, BorderLayout.NORTH);
-        mainPanel.add(formPanel, BorderLayout.CENTER);
-        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
-        add(mainPanel);
+    private void addFormRow(JPanel form, GridBagConstraints c,
+                            String labelText, JTextField field) {
+        c.gridx = 0; c.gridy++; c.weightx = 1;
+        c.insets = new Insets(0, 0, 5, 0);
+        form.add(new JLabel(labelText), c);
+        c.gridy++; c.insets = new Insets(0, 0, 12, 0);
+        form.add(field, c);
     }
 
     private void register() {

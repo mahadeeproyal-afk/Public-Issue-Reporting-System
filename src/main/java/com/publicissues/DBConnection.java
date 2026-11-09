@@ -77,10 +77,35 @@ public class DBConnection {
             return connection;
         }
 
-        String username = properties.getProperty("db.username");
-        String password = properties.getProperty("db.password");
+        Properties productionCredentials = productionConnectionProperties(
+                properties,
+                System.getenv("CIVIC_ISSUE_DB_USERNAME"),
+                System.getenv("CIVIC_ISSUE_DB_PASSWORD"));
+        return DriverManager.getConnection(url, productionCredentials);
+    }
 
-        return DriverManager.getConnection(url, username, password);
+    static Properties productionConnectionProperties(Properties configuration,
+                                                      String username,
+                                                      String password)
+            throws SQLException {
+        if (username == null || username.isBlank()) {
+            throw new SQLException(
+                    "Production database username is missing. Set CIVIC_ISSUE_DB_USERNAME.");
+        }
+        if (password == null || password.isBlank()) {
+            throw new SQLException(
+                    "Production database password is missing. Set CIVIC_ISSUE_DB_PASSWORD.");
+        }
+        if (configuration == null
+                || configuration.getProperty("db.url") == null
+                || configuration.getProperty("db.url").isBlank()) {
+            throw new SQLException("Production database URL is not configured.");
+        }
+
+        Properties connectionProperties = new Properties();
+        connectionProperties.setProperty("user", username);
+        connectionProperties.setProperty("password", password);
+        return connectionProperties;
     }
 
     public static void main(String[] args) {

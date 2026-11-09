@@ -43,13 +43,13 @@ public class IssueManagementService {
     public void updateStatus(
             int issueId, int changedBy, String newStatus, String remarks) {
         validatePositiveId(issueId, "issue ID");
-        validatePositiveId(changedBy, "admin user ID");
+        int actorId = requireAdminSession(changedBy);
         validateStatus(newStatus);
 
         try (Connection connection = DBConnection.getConnection()) {
             beginTransaction(connection);
             try {
-                requireAdmin(connection, changedBy);
+                requireAdmin(connection, actorId);
                 Issue issue = requireIssue(connection, issueId);
                 String oldStatus = issue.getStatus();
 
@@ -62,7 +62,7 @@ public class IssueManagementService {
                     throw new SQLException("Issue status was not updated.");
                 }
 
-                issueHistoryDAO.addHistory(connection, issueId, changedBy,
+                issueHistoryDAO.addHistory(connection, issueId, actorId,
                         oldStatus, newStatus, remarks);
                 connection.commit();
             } catch (SQLException | RuntimeException e) {
@@ -78,12 +78,12 @@ public class IssueManagementService {
             int issueId, int departmentId, int changedBy, String remarks) {
         validatePositiveId(issueId, "issue ID");
         validatePositiveId(departmentId, "department ID");
-        validatePositiveId(changedBy, "admin user ID");
+        int actorId = requireAdminSession(changedBy);
 
         try (Connection connection = DBConnection.getConnection()) {
             beginTransaction(connection);
             try {
-                requireAdmin(connection, changedBy);
+                requireAdmin(connection, actorId);
                 Issue issue = requireIssue(connection, issueId);
 
                 if (!departmentDAO.exists(connection, departmentId)) {
@@ -106,8 +106,13 @@ public class IssueManagementService {
                         throw new SQLException(
                                 "Issue status was not updated to ASSIGNED.");
                     }
-                    issueHistoryDAO.addHistory(connection, issueId, changedBy,
+                    issueHistoryDAO.addHistory(connection, issueId, actorId,
                             issue.getStatus(), "ASSIGNED", remarks);
+                } else if (departmentChanged) {
+                    // The schema records status history only. A same-status
+                    // entry preserves an auditable event for reassignment.
+                    issueHistoryDAO.addHistory(connection, issueId, actorId,
+                            issue.getStatus(), issue.getStatus(), remarks);
                 }
 
                 connection.commit();
@@ -118,6 +123,19 @@ public class IssueManagementService {
         } catch (SQLException e) {
             throw new IllegalStateException("Unable to assign issue.", e);
         }
+    }
+
+    private int requireAdminSession(int suppliedActorId) {
+        if (!SessionManager.isAdmin()) {
+            throw new IllegalArgumentException(
+                    "An authenticated administrator session is required.");
+        }
+        int authenticatedActorId = SessionManager.getCurrentUserId();
+        if (suppliedActorId != authenticatedActorId) {
+            throw new IllegalArgumentException(
+                    "The acting administrator must match the active session.");
+        }
+        return authenticatedActorId;
     }
 
     private void requireAdmin(Connection connection, int userId)

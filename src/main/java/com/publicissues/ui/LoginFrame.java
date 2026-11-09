@@ -1,15 +1,17 @@
 package com.publicissues.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.GridLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.Arrays;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
-import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
@@ -34,6 +36,7 @@ public class LoginFrame extends JFrame {
     private final JComboBox<String> roleBox;
     private final JButton loginButton;
     private final JButton registerButton;
+    private final JButton trackButton;
     private boolean authenticationRunning;
 
     public LoginFrame(Consumer<User> onAuthenticated) {
@@ -47,7 +50,8 @@ public class LoginFrame extends JFrame {
         this.onAuthenticated = onAuthenticated;
 
         setTitle("Public Issue Reporting System - Login");
-        setSize(420, 280);
+        setSize(500, 560);
+        setMinimumSize(new Dimension(460, 520));
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
             @Override
@@ -58,7 +62,7 @@ public class LoginFrame extends JFrame {
             }
         });
         setLocationRelativeTo(null);
-        setResizable(false);
+        setResizable(true);
 
         emailField = new JTextField(20);
         passwordField = new JPasswordField(20);
@@ -66,49 +70,76 @@ public class LoginFrame extends JFrame {
         roleBox = new JComboBox<>(
                 new String[]{"Citizen", "Administrator"});
 
-        loginButton = new JButton("Login");
-        registerButton = new JButton("Register as Citizen");
+        CivicTheme.styleField(emailField);
+        CivicTheme.styleField(passwordField);
+        loginButton = CivicTheme.primaryButton("Sign in");
+        registerButton = CivicTheme.secondaryButton("Create citizen account");
+        trackButton = CivicTheme.secondaryButton("Track a complaint");
+        CivicTheme.styleComboBox(roleBox);
+        roleBox.setBackground(CivicTheme.SURFACE);
 
         buildInterface();
 
         loginButton.addActionListener(e -> authenticate());
         registerButton.addActionListener(e -> openRegistration());
+        trackButton.addActionListener(e -> openPublicTracking());
 
         getRootPane().setDefaultButton(loginButton);
     }
 
     private void buildInterface() {
+        JPanel page = new JPanel(new BorderLayout());
+        page.setBackground(CivicTheme.CANVAS);
+        page.setBorder(javax.swing.BorderFactory.createEmptyBorder(24, 26, 24, 26));
 
-        JPanel mainPanel = new JPanel(new BorderLayout(10, 15));
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(
-                20, 30, 20, 30));
+        JPanel card = new JPanel(new BorderLayout(0, 22));
+        card.setBackground(CivicTheme.SURFACE);
+        card.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+                javax.swing.BorderFactory.createLineBorder(CivicTheme.BORDER),
+                javax.swing.BorderFactory.createEmptyBorder(28, 34, 25, 34)));
 
-        JLabel heading = new JLabel(
-                "PUBLIC ISSUE REPORTING SYSTEM",
-                JLabel.CENTER);
+        JLabel eyebrow = new JLabel("CIVIC SERVICES  /  PUBLIC REPORTING");
+        eyebrow.setFont(CivicTheme.BODY_BOLD);
+        eyebrow.setForeground(CivicTheme.ACCENT);
+        JLabel heading = new JLabel("Welcome back");
+        heading.setFont(CivicTheme.TITLE);
+        JLabel subtitle = new JLabel("Sign in to follow and manage community issues.");
+        subtitle.setForeground(CivicTheme.MUTED);
+        JPanel headingPanel = new JPanel(new GridBagLayout());
+        headingPanel.setBackground(CivicTheme.SURFACE);
+        GridBagConstraints h = new GridBagConstraints();
+        h.gridx = 0; h.gridy = 0; h.anchor = GridBagConstraints.WEST;
+        h.insets = new Insets(0, 0, 8, 0); headingPanel.add(eyebrow, h);
+        h.gridy++; h.insets = new Insets(0, 0, 6, 0); headingPanel.add(heading, h);
+        h.gridy++; h.insets = new Insets(0, 0, 0, 0); headingPanel.add(subtitle, h);
 
-        JPanel formPanel = new JPanel(new GridLayout(3, 2, 10, 12));
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setBackground(CivicTheme.SURFACE);
+        GridBagConstraints c = new GridBagConstraints();
+        c.gridx = 0; c.gridy = 0; c.weightx = 1; c.fill = GridBagConstraints.HORIZONTAL;
+        c.anchor = GridBagConstraints.WEST; c.insets = new Insets(0, 0, 6, 0);
+        form.add(new JLabel("Email address"), c);
+        c.gridy++; c.insets = new Insets(0, 0, 16, 0); form.add(emailField, c);
+        c.gridy++; c.insets = new Insets(0, 0, 6, 0); form.add(new JLabel("Password"), c);
+        c.gridy++; c.insets = new Insets(0, 0, 16, 0); form.add(passwordField, c);
+        c.gridy++; c.insets = new Insets(0, 0, 6, 0); form.add(new JLabel("Sign in as"), c);
+        c.gridy++; c.insets = new Insets(0, 0, 0, 0); form.add(roleBox, c);
 
-        formPanel.add(new JLabel("Email:"));
-        formPanel.add(emailField);
+        JPanel footer = new JPanel(new GridBagLayout());
+        footer.setBackground(CivicTheme.SURFACE);
+        GridBagConstraints f = new GridBagConstraints();
+        f.gridx = 0; f.gridy = 0; f.weightx = 1; f.fill = GridBagConstraints.HORIZONTAL;
+        f.insets = new Insets(0, 0, 12, 0); footer.add(loginButton, f);
+        JPanel links = new JPanel(new FlowLayout(FlowLayout.CENTER, 7, 0));
+        links.setBackground(CivicTheme.SURFACE);
+        links.add(registerButton); links.add(trackButton);
+        f.gridy++; f.insets = new Insets(0, 0, 0, 0); footer.add(links, f);
 
-        formPanel.add(new JLabel("Password:"));
-        formPanel.add(passwordField);
-
-        formPanel.add(new JLabel("Login as:"));
-        formPanel.add(roleBox);
-
-        JPanel buttonPanel = new JPanel(new FlowLayout(
-                FlowLayout.CENTER));
-
-        buttonPanel.add(loginButton);
-        buttonPanel.add(registerButton);
-
-        mainPanel.add(heading, BorderLayout.NORTH);
-        mainPanel.add(formPanel, BorderLayout.CENTER);
-        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
-
-        add(mainPanel);
+        card.add(headingPanel, BorderLayout.NORTH);
+        card.add(form, BorderLayout.CENTER);
+        card.add(footer, BorderLayout.SOUTH);
+        page.add(card, BorderLayout.CENTER);
+        add(CivicTheme.scrollPane(page));
     }
 
     private void authenticate() {
@@ -211,6 +242,10 @@ public class LoginFrame extends JFrame {
         }
         new RegistrationFrame(onAuthenticated).setVisible(true);
         dispose();
+    }
+
+    private void openPublicTracking() {
+        if (!authenticationRunning) new PublicTrackingDialog(this).setVisible(true);
     }
 
     private void showError(String message) {

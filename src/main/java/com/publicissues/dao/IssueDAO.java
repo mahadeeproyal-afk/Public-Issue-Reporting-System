@@ -12,6 +12,7 @@ import java.util.List;
 
 import com.publicissues.DBConnection;
 import com.publicissues.model.Issue;
+import com.publicissues.model.PublicIssueTracking;
 
 public class IssueDAO {
 
@@ -62,35 +63,40 @@ public class IssueDAO {
         throw new SQLException("Complaint ID could not be generated.");
     }
 
-    // Find a complaint using its tracking code.
-    public Issue findByTrackingCode(String trackingCode)
+    /** Selects only the public tracking allowlist; never maps the private entity. */
+    public PublicIssueTracking findPublicTrackingByCode(String trackingCode)
             throws SQLException {
-
         String sql = """
-                SELECT * FROM issues
-                WHERE tracking_code = ?
+                SELECT tracking_code, title, category, status, created_at
+                FROM issues WHERE tracking_code = ?
                 """;
-
         try (Connection connection = DBConnection.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-
             statement.setString(1, trackingCode);
-
             try (ResultSet result = statement.executeQuery()) {
-
-                if (result.next()) {
-                    return mapIssue(result);
-                }
+                if (!result.next()) return null;
+                Timestamp submitted = result.getTimestamp("created_at");
+                return new PublicIssueTracking(result.getString("tracking_code"),
+                        result.getString("title"), result.getString("category"),
+                        result.getString("status"),
+                        submitted == null ? null : submitted.toLocalDateTime());
             }
         }
-
-        return null;
     }
 
-    // Retrieve all complaints for the admin dashboard.
+    /**
+     * Raw persistence query used by IssueService.getAllIssues(), which requires
+     * an active administrator session. Kept public for the service package.
+     */
     public List<Issue> findAll() throws SQLException {
 
-        String sql = "SELECT * FROM issues ORDER BY created_at DESC";
+        String sql = """
+                SELECT i.*, u.name AS citizen_name,
+                       u.email AS citizen_email, u.phone AS citizen_phone
+                FROM issues i
+                JOIN app_users u ON u.user_id = i.citizen_id
+                ORDER BY i.created_at DESC
+                """;
 
         List<Issue> issues = new ArrayList<>();
 
@@ -99,7 +105,9 @@ public class IssueDAO {
              ResultSet result = statement.executeQuery()) {
 
             while (result.next()) {
-                issues.add(mapIssue(result));
+                Issue issue = mapIssue(result);
+                mapCitizenContact(result, issue);
+                issues.add(issue);
             }
         }
 
@@ -154,7 +162,10 @@ public class IssueDAO {
         }
     }
 
-    // Find an issue by ID using an existing connection.
+    /**
+     * Raw transaction query used by IssueManagementService and authorized
+     * IssueService detail retrieval. Callers must enforce service-layer access.
+     */
     public Issue findById(Connection connection, int issueId)
             throws SQLException {
 
@@ -173,6 +184,34 @@ public class IssueDAO {
         }
 
         return null;
+    }
+
+    /** Used by IssueService.getIssueDetails(), which verifies owner/admin access. */
+    public Issue findById(int issueId) throws SQLException {
+        try (Connection connection = DBConnection.getConnection()) {
+            return findById(connection, issueId);
+        }
+    }
+
+    /** Admin-only contact enrichment; caller must verify an active admin session. */
+    public Issue findByIdForAdmin(int issueId) throws SQLException {
+        String sql = """
+                SELECT i.*, u.name AS citizen_name,
+                       u.email AS citizen_email, u.phone AS citizen_phone
+                FROM issues i
+                JOIN app_users u ON u.user_id = i.citizen_id
+                WHERE i.issue_id = ?
+                """;
+        try (Connection connection = DBConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, issueId);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) return null;
+                Issue issue = mapIssue(result);
+                mapCitizenContact(result, issue);
+                return issue;
+            }
+        }
     }
 
     // Update issue status using an existing transaction connection.
@@ -249,5 +288,12 @@ public class IssueDAO {
         }
 
         return issue;
+    }
+
+    private void mapCitizenContact(ResultSet result, Issue issue)
+            throws SQLException {
+        issue.setCitizenName(result.getString("citizen_name"));
+        issue.setCitizenEmail(result.getString("citizen_email"));
+        issue.setCitizenPhone(result.getString("citizen_phone"));
     }
 }

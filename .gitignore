@@ -19,3 +19,4 @@ $RECYCLE.BIN/
 
 # Preserve the previous nested ignore file outside active ignore rules
 /.gitignore-legacy/
+/\.m2/

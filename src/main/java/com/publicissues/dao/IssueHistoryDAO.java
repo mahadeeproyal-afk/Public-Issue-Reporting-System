@@ -67,10 +67,11 @@ public class IssueHistoryDAO {
             throws SQLException {
 
         String sql = """
-                SELECT old_status, new_status, remarks, changed_at
-                FROM issue_history
-                WHERE issue_id = ?
-                ORDER BY changed_at ASC, history_id ASC
+                SELECT h.old_status, h.new_status, h.remarks, h.changed_at, u.name AS actor_name
+                FROM issue_history h
+                JOIN app_users u ON u.user_id = h.changed_by
+                WHERE h.issue_id = ?
+                ORDER BY h.changed_at ASC, h.history_id ASC
                 """;
 
         List<String> history = new ArrayList<>();
@@ -89,13 +90,15 @@ public class IssueHistoryDAO {
                     String remarks = result.getString("remarks");
 
                     Timestamp changedAt = result.getTimestamp("changed_at");
+                    String actorName = result.getString("actor_name");
 
                     String entry = "Status: "
                             + (oldStatus == null ? "NEW" : oldStatus)
                             + " -> " + newStatus
-                            + " | Remarks: "
-                            + (remarks == null ? "None" : remarks)
-                            + " | Date: " + changedAt;
+                            + "\nRemarks: "
+                            + (remarks == null || remarks.isBlank() ? "None" : remarks)
+                            + "\nDate: " + changedAt
+                            + "\nUpdated by: " + (actorName == null ? "Unavailable" : actorName);
 
                     history.add(entry);
                 }
